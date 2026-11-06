@@ -1,0 +1,32 @@
+name: Build AflatoonMubdi dylib
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dylib
+        run: |
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          CC="$(xcrun --sdk iphoneos --find clang)"
+          FLAGS="-arch arm64 -isysroot $SDK -miphoneos-version-min=14.0 -O2 -fPIC -Wno-deprecated-declarations"
+          mkdir -p obj out
+          for f in *.m; do $CC $FLAGS -fobjc-arc -c "$f" -o "obj/${f%.m}.o"; done
+          for f in *.c; do $CC $FLAGS -c "$f" -o "obj/${f%.c}.o"; done
+          $CC -arch arm64 -isysroot $SDK -miphoneos-version-min=14.0 -dynamiclib \
+            -install_name @executable_path/Frameworks/AflatoonMubdi.dylib \
+            -framework Foundation -framework UIKit -framework AudioToolbox -framework QuartzCore \
+            -framework CoreGraphics -framework Network -framework UniformTypeIdentifiers \
+            obj/*.o -o out/AflatoonMubdi.dylib
+          codesign -f -s - out/AflatoonMubdi.dylib
+          file out/AflatoonMubdi.dylib
+          otool -L out/AflatoonMubdi.dylib
+          if otool -L out/AflatoonMubdi.dylib | grep -Eqi 'substrate|substitute|ellekit|libhooker'; then echo "jailbreak lib linked"; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AflatoonMubdi-dylib
+          path: out/AflatoonMubdi.dylib
+          if-no-files-found: error
